@@ -311,42 +311,71 @@ function ident(prev, next){
 }
 
 /* ---------- Playback ---------- */
-let stallTimer = null;
+let stallTimer = null, badRun = 0;
+function startVideo(item){
+  if (!S.ready) return;               // onReady picks it up
+  S.player.loadVideoById(item.yt);
+  try { S.player.unMute(); } catch(e) {}
+  clearTimeout(stallTimer);
+  stallTimer = setTimeout(() => {
+    const st = S.player.getPlayerState && S.player.getPlayerState();
+    if (S.current === item && st !== 1 && st !== 3) {
+      $('idle').hidden = true;
+      setStatus('Tap the video once to start the sound', false);
+    }
+  }, 3000);
+}
 async function playNext(){
   const prev = S.current;
-  if (prev) { S.history.unshift(prev); S.history = S.history.slice(0, 40); renderHist(); }
+  if (prev && !prev.failed) { S.history.unshift(prev); S.history = S.history.slice(0, 40); renderHist(); }
   const item = S.queue.shift();
   S.current = null;
   if (!item) { S.pendingPlay = true; setStatus('Tuning…'); topUp(); return; }
   S.current = item;
   renderNow(); renderQueue();
-  const line = ident(prev, item);
+  // No announcer before the first track: the phone only allows sound straight after a tap
+  const line = prev ? ident(prev, item) : null;
   S.played++;
-  if (line) { setStatus('Announcer', true); if (S.ready) S.player.pauseVideo(); await speak(line); }
+  if (line) { setStatus('Announcer', true); await speak(line); }
   if (S.current !== item) return;
-  if (S.ready) {
-    S.player.loadVideoById(item.yt);
-    clearTimeout(stallTimer);
-    stallTimer = setTimeout(() => {
-      const st = S.player.getPlayerState && S.player.getPlayerState();
-      if (st !== 1 && st !== 3 && st !== 2) setStatus('Tap play on the video to start the sound', false);
-    }, 5000);
-  }
+  startVideo(item);
   topUp();
+}
+function onPlayerError(e){
+  const item = S.current; if (!item) return;
+  clearTimeout(stallTimer);
+  item.failed = true;
+  badRun++;
+  const why = (e.data === 101 || e.data === 150) ? 'the owner blocks it on other sites'
+            : e.data === 100 ? 'it has been removed' : 'YouTube refused it';
+  // Try another video from the same record before moving on
+  const alt = (S.vidCache.get(item.rel.id) || []).find(v => v.yt !== item.yt && !(item.tried || []).includes(v.yt));
+  if (badRun >= 8) {
+    setStatus('Lots of videos are refusing to play here. Try Make a YouTube mix instead');
+    badRun = 0; return;
+  }
+  if (alt) {
+    item.tried = (item.tried || [item.yt]).concat(alt.yt);
+    item.yt = alt.yt; item.vtitle = alt.vtitle; item.failed = false;
+    setStatus(`Skipped a video (${why}), trying another from this record`);
+    renderNow(); startVideo(item); return;
+  }
+  setStatus(`Skipping, ${why}`);
+  setTimeout(playNext, 800);
 }
 
 window.onYouTubeIframeAPIReady = function(){
   S.player = new YT.Player('yt', {
     width: '100%', height: '100%',
-    playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+    playerVars: { playsinline: 1, rel: 0, origin: location.origin, enablejsapi: 1 },
     events: {
-      onReady: () => { S.ready = true; },
+      onReady: () => { S.ready = true; if (S.current) startVideo(S.current); },
       onStateChange: e => {
-        if (e.data === 1) { $('idle').hidden = true; setStatus('On air', true); $('playBtn').textContent = 'Pause'; }
+        if (e.data === 1) { badRun = 0; clearTimeout(stallTimer); $('idle').hidden = true; setStatus('On air', true); $('playBtn').textContent = 'Pause'; }
         if (e.data === 2) { setStatus('Paused'); $('playBtn').textContent = 'Play'; }
         if (e.data === 0) playNext();
       },
-      onError: () => { setStatus('That video won’t play here, skipping'); setTimeout(playNext, 1200); }
+      onError: onPlayerError
     }
   });
 };
@@ -365,6 +394,8 @@ function renderNow(){
     .forEach(t => { const s = document.createElement('span'); s.textContent = t; meta.appendChild(s); });
   const a = document.createElement('a'); a.href = 'https://www.discogs.com/release/' + r.id; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'View on Discogs';
   meta.appendChild(a);
+  const y = document.createElement('a'); y.href = 'https://www.youtube.com/watch?v=' + it.yt; y.target = '_blank'; y.rel = 'noopener'; y.textContent = 'Open in YouTube';
+  meta.appendChild(y);
   $('nowVideo').textContent = it.vtitle ? 'Video: ' + it.vtitle : '';
   const tags = $('nowTags'); tags.textContent = '';
   r.styles.slice(0, 5).forEach(t => { const s = document.createElement('span'); s.className = 'tag'; s.textContent = t; tags.appendChild(s); });
@@ -455,6 +486,6 @@ $('token').onchange = e => { S.token = e.target.value.trim(); store.set('cfm:tok
 load();
 })();
 </script>
-<script src="https://www.youtube.com/iframe_api"></script>
+<script src="https://www.youtube.com/iframe_api" onerror="document.getElementById('status').textContent='The YouTube player didn\u2019t load. Check your connection or content blocker'"></script>
 </body>
 </html>
