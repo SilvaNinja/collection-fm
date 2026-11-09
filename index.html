@@ -283,6 +283,7 @@ async function topUp(){
       const v = vids[Math.floor(Math.random() * vids.length)];
       S.queue.push({ rel, ...v });
       renderQueue();
+      cueFirst();
       if (S.pendingPlay) { S.pendingPlay = false; playNext(); }
     }
     if (!S.queue.length && !S.current) setStatus('No playable records found on this dial');
@@ -312,6 +313,16 @@ function ident(prev, next){
 
 /* ---------- Playback ---------- */
 let stallTimer = null, badRun = 0;
+// Phones only allow sound after a tap inside the YouTube player itself,
+// so the first track is loaded paused and started with YouTube's own play button.
+function cueFirst(){
+  if (S.started || S.current || !S.ready || !S.queue.length) return;
+  S.current = S.queue.shift();
+  renderNow(); renderQueue();
+  S.player.cueVideoById(S.current.yt);
+  $('idle').hidden = true;
+  setStatus('Ready. Tap play on the video to start', false);
+}
 function startVideo(item){
   if (!S.ready) return;               // onReady picks it up
   S.player.loadVideoById(item.yt);
@@ -369,9 +380,9 @@ window.onYouTubeIframeAPIReady = function(){
     width: '100%', height: '100%',
     playerVars: { playsinline: 1, rel: 0, origin: location.origin, enablejsapi: 1 },
     events: {
-      onReady: () => { S.ready = true; if (S.current) startVideo(S.current); },
+      onReady: () => { S.ready = true; if (S.started && S.current) startVideo(S.current); else cueFirst(); },
       onStateChange: e => {
-        if (e.data === 1) { badRun = 0; clearTimeout(stallTimer); $('idle').hidden = true; setStatus('On air', true); $('playBtn').textContent = 'Pause'; }
+        if (e.data === 1) { if (!S.started) { S.started = true; keepAwake(); } badRun = 0; clearTimeout(stallTimer); $('idle').hidden = true; setStatus('On air', true); $('playBtn').textContent = 'Pause'; }
         if (e.data === 2) { setStatus('Paused'); $('playBtn').textContent = 'Play'; }
         if (e.data === 0) playNext();
       },
@@ -440,7 +451,14 @@ async function load(){
 $('loadBtn').onclick = load;
 $('user').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
 $('playBtn').onclick = () => {
-  if (!S.started) { S.started = true; keepAwake(); $('playBtn').textContent = 'Pause'; playNext(); return; }
+  if (!S.started) {
+    if (S.current && S.ready) {
+      S.player.playVideo();
+      setTimeout(() => { if (!S.started) setStatus('Tap play on the video itself to start', false); }, 1200);
+      return;
+    }
+    S.started = true; keepAwake(); $('playBtn').textContent = 'Pause'; playNext(); return;
+  }
   if (!S.ready) return;
   const st = S.player.getPlayerState();
   if (st === 1) S.player.pauseVideo(); else S.player.playVideo();
@@ -478,7 +496,8 @@ let wake = null;
 async function keepAwake(){ try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => wake = null); } } catch(e) {} }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.started) keepAwake(); });
 
-function redial(){ S.queue = S.queue.filter(q => pool().some(p => p.id === q.rel.id)); refillBag(); renderQueue(); topUp(); }
+function redial(){
+  if (!S.started && S.current) { S.current = null; } S.queue = S.queue.filter(q => pool().some(p => p.id === q.rel.id)); refillBag(); renderQueue(); cueFirst(); topUp(); }
 $('style').onchange = redial; $('decade').onchange = redial;
 $('announcer').onchange = e => store.set('cfm:announcer', e.target.value);
 $('token').onchange = e => { S.token = e.target.value.trim(); store.set('cfm:token', S.token); };
