@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Collection FM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a hi-fi tuner faceplate — amber readout strip on top, deck (video + now playing) left, dial + queue right */
+:root{
+  --bg:#e3e6e9; --panel:#f3f4f5; --ink:#15181c; --muted:#58616a; --line:#c4cad0;
+  --accent:#c4501a; --accent-ink:#ffffff;
+  --lcd-bg:#16191b; --lcd-fg:#f2a93b; --lcd-dim:#7a5a27;
+  --display:"Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0e1113; --panel:#161a1d; --ink:#e6ebee; --muted:#8a949c; --line:#283036;
+         --accent:#f0a024; --accent-ink:#16191b; --lcd-bg:#08090a; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:max(16px,env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-bottom,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:16px}
+a{color:inherit}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Readout strip */
+.lcd{background:var(--lcd-bg);color:var(--lcd-fg);border-radius:10px;padding:14px 18px;display:flex;flex-wrap:wrap;
+  align-items:center;gap:8px 20px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),inset 0 8px 24px rgba(0,0,0,.5)}
+.lcd .station{font:800 clamp(30px,6vw,44px)/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
+  text-shadow:0 0 12px rgba(242,169,59,.35)}
+.lcd .freq{font:500 13px/1 var(--mono);color:var(--lcd-dim)}
+.lcd .freq b{color:var(--lcd-fg);font-weight:500}
+.lcd .status{margin-left:auto;font:400 12px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.08em;min-width:0}
+.onair{display:inline-flex;align-items:center;gap:6px}
+.onair i{width:8px;height:8px;border-radius:50%;background:var(--lcd-dim)}
+.onair.live i{background:#ff4b2b;box-shadow:0 0 8px #ff4b2b}
+
+.grid{display:grid;gap:16px;grid-template-columns:1fr}
+@media (min-width:860px){.grid{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:14px;min-width:0;align-content:start}
+.label{font:500 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+
+/* Deck */
+.screen{position:relative;width:100%;max-width:100%;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden}
+.screen #yt,.screen iframe{position:absolute;inset:0;width:100%;height:100%}
+.screen .idle{position:absolute;inset:0;display:grid;place-items:center;color:#9aa3aa;font:400 13px/1.5 var(--mono);text-align:center;padding:20px}
+.now{display:grid;grid-template-columns:96px minmax(0,1fr);gap:14px;align-items:start}
+.cover{width:96px;height:96px;border-radius:4px;background:var(--line);object-fit:cover}
+.now h2{margin:0;font:700 22px/1.15 var(--body);text-wrap:balance}
+.now .artist{font-weight:500;font-size:16px}
+.meta{font:400 12px/1.6 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 12px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font:500 11px/1 var(--mono);padding:5px 7px;border:1px solid var(--line);border-radius:3px;color:var(--muted)}
+.vtitle{font-size:13px;color:var(--muted)}
+.transport{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--bg);padding:9px 14px;border-radius:6px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* Dial */
+.field{display:grid;gap:6px}
+.field input,.field select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.row{display:flex;gap:8px;align-items:end}
+.row .field{flex:1;min-width:0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+details summary{cursor:pointer;font-size:13px;color:var(--muted)}
+details[open] summary{margin-bottom:10px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.count{font:400 12px/1.4 var(--mono);color:var(--muted)}
+
+/* Lists */
+ol.list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+ol.list li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+ol.list li:first-child{border-top:0}
+ol.list img{width:40px;height:40px;border-radius:3px;object-fit:cover;background:var(--line)}
+ol.list .t{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+ol.list .t small{display:block;color:var(--muted);font:400 11px/1.4 var(--mono)}
+.empty{font-size:13px;color:var(--muted)}
+.mix{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px;color:var(--muted)}
+a.btn{text-decoration:none;display:inline-block}
+@media (max-width:520px){.transport .btn{flex:1 1 40%}.now{grid-template-columns:72px minmax(0,1fr)}.cover{width:72px;height:72px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="lcd" aria-live="polite">
+    <div class="station" id="station">Collection FM</div>
+    <div class="freq"><b id="freq">--.-</b> MHz · Discogs</div>
+    <div class="status"><span class="onair" id="onair"><i></i><span id="status">Enter a username to tune in</span></span></div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Now playing">
+      <div class="screen"><div id="yt"></div><div class="idle" id="idle">Pick a username and press Tune in.<br>Audio comes from the YouTube links attached to each release.</div></div>
+      <div class="transport">
+        <button class="btn primary" id="playBtn" disabled>Tune in</button>
+        <button class="btn" id="skipBtn" disabled>Skip</button>
+        <button class="btn" id="dropBtn" disabled title="Skip and don't pick this record again this session">Not this one</button>
+        <button class="btn" id="mixBtn" disabled>Make a YouTube mix</button>
+      </div>
+      <div class="mix" id="mix" hidden>
+        <span id="mixMsg"></span>
+        <a class="btn primary" id="mixLink" target="_blank" rel="noopener" hidden>Open in YouTube</a>
+      </div>
+      <div class="now" id="now" hidden>
+        <img class="cover" id="nowCover" alt="">
+        <div style="display:grid;gap:6px;min-width:0">
+          <div class="label">Now playing</div>
+          <h2><span class="artist" id="nowArtist"></span><br><span id="nowTitle"></span></h2>
+          <div class="meta" id="nowMeta"></div>
+          <div class="vtitle" id="nowVideo"></div>
+          <div class="tags" id="nowTags"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Station controls">
+      <div class="row">
+        <div class="field"><label class="label" for="user">Discogs username</label><input id="user" value="d_q" autocomplete="off" spellcheck="false"></div>
+        <button class="btn" id="loadBtn">Load</button>
+      </div>
+      <div class="count" id="count">No collection loaded</div>
+      <div class="two">
+        <div class="field"><label class="label" for="style">Style</label><select id="style"><option value="">All styles</option></select></div>
+        <div class="field"><label class="label" for="decade">Decade</label><select id="decade"><option value="">Any year</option></select></div>
+      </div>
+      <div class="field"><label class="label" for="announcer">Announcer</label>
+        <select id="announcer"><option value="few">Every few tracks</option><option value="all">Every track</option><option value="off">Off</option></select></div>
+      <details>
+        <summary>Faster loading (optional token)</summary>
+        <div class="field"><label class="label" for="token">Discogs personal token</label><input id="token" type="password" autocomplete="off" placeholder="From discogs.com/settings/developers"></div>
+        <p class="hint">Raises the Discogs limit from 25 to 60 requests a minute. It stays in this browser only.</p>
+      </details>
+      <div class="field"><div class="label">Up next</div><ol class="list" id="next"><li class="empty" style="display:block">Nothing queued yet</li></ol></div>
+      <div class="field"><div class="label">Recently played</div><ol class="list" id="hist"><li class="empty" style="display:block">Nothing played yet</li></ol></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function(){
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+const S = {
+  user:'', token: store.get('cfm:token') || '', items:[], bag:[], queue:[], history:[],
+  current:null, started:false, filling:false, dead:new Set(), vidCache:new Map(),
+  player:null, ready:false, played:0, pendingPlay:false
+};
+$('token').value = S.token;
+$('announcer').value = store.get('cfm:announcer') || 'few';
+
+/* ---------- Discogs API with client-side throttle ---------- */
+let nextSlot = 0;
+async function api(path){
+  const gap = S.token ? 1100 : 2600;
+  const now = Date.now();
+  const at = Math.max(now, nextSlot);
+  nextSlot = at + gap;
+  if (at > now) await sleep(at - now);
+  let url = 'https://api.discogs.com' + path;
+  if (S.token) url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(S.token);
+  const r = await fetch(url, { headers: { 'Accept': 'application/vnd.discogs.v2.discogs+json' } });
+  if (r.status === 429){ setStatus('Discogs rate limit hit, waiting a minute'); await sleep(60000); return api(path); }
+  if (!r.ok){ const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+  return r.json();
+}
+
+const cleanName = s => (s || '').replace(/\s\(\d+\)$/, '').replace(/\*$/, '');
+function slim(it){
+  const b = it.basic_information || {};
+  const lab = (b.labels || [])[0] || {};
+  return {
+    id: b.id || it.id, title: b.title || '',
+    artist: (b.artists || []).map(a => cleanName(a.anv || a.name) + (a.join && a.join !== ',' ? ' ' + a.join : '')).join(' ').replace(/\s+,/g, ',').trim() || 'Unknown artist',
+    year: b.year || 0, styles: b.styles || [], genres: b.genres || [],
+    label: cleanName(lab.name), catno: lab.catno || '',
+    format: ((b.formats || [])[0] || {}).name || '',
+    cover: b.cover_image || b.thumb || '', master: b.master_id || 0
+  };
+}
+
+async function loadCollection(user){
+  const key = 'cfm:col:' + user.toLowerCase();
+  const cached = store.get(key);
+  if (cached && Date.now() - cached.ts < 24*3600e3) return cached.items;
+  const out = [];
+  let page = 1, pages = 1;
+  do {
+    setStatus(`Reading collection, page ${page} of ${pages}`);
+    const d = await api(`/users/${encodeURIComponent(user)}/collection/folders/0/releases?per_page=100&page=${page}&sort=added&sort_order=desc`);
+    pages = d.pagination ? d.pagination.pages : 1;
+    (d.releases || []).forEach(r => out.push(slim(r)));
+    $('count').textContent = `${out.length} records read…`;
+    page++;
+  } while (page <= pages);
+  store.set(key, { ts: Date.now(), items: out });
+  return out;
+}
+
+/* ---------- Station identity ---------- */
+function freqFor(name){
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return (88 + (h % 200) / 10).toFixed(1);
+}
+function setStation(user){
+  $('station').textContent = user + ' FM';
+  $('freq').textContent = freqFor(user.toLowerCase());
+  document.title = user + ' FM';
+}
+function setStatus(t, live){ $('status').textContent = t; $('onair').classList.toggle('live', !!live); }
+
+/* ---------- Filters and shuffle bag ---------- */
+function buildFilters(){
+  const counts = {}, decades = {};
+  S.items.forEach(it => {
+    it.styles.forEach(s => counts[s] = (counts[s] || 0) + 1);
+    if (it.year) { const d = Math.floor(it.year / 10) * 10; decades[d] = (decades[d] || 0) + 1; }
+  });
+  const sSel = $('style'), dSel = $('decade');
+  sSel.length = 1; dSel.length = 1;
+  Object.entries(counts).sort((a,b) => b[1]-a[1]).forEach(([s,n]) => sSel.add(new Option(`${s} (${n})`, s)));
+  Object.keys(decades).map(Number).sort().forEach(d => dSel.add(new Option(`${d}s (${decades[d]})`, d)));
+}
+function pool(){
+  const st = $('style').value, dc = $('decade').value;
+  return S.items.filter(it => !S.dead.has(it.id)
+    && (!st || it.styles.includes(st))
+    && (!dc || (it.year && Math.floor(it.year/10)*10 === Number(dc))));
+}
+function refillBag(){
+  const p = pool();
+  for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  S.bag = p;
+  $('count').textContent = `${S.items.length} records · ${p.length} on this dial`;
+}
+function draw(){ if (!S.bag.length) refillBag(); return S.bag.pop() || null; }
+
+/* ---------- Videos per release ---------- */
+function ytId(u){ const m = /(?:v=|youtu\.be\/|embed\/)([\w-]{11})/.exec(u || ''); return m ? m[1] : null; }
+function pickVideos(list){
+  const seen = new Set();
+  return (list || []).filter(v => v.embed !== false).map(v => ({ yt: ytId(v.uri), vtitle: v.title || '' }))
+    .filter(v => v.yt && !seen.has(v.yt) && seen.add(v.yt));
+}
+async function videosFor(rel){
+  if (S.vidCache.has(rel.id)) return S.vidCache.get(rel.id);
+  let vids = [];
+  try { vids = pickVideos((await api('/releases/' + rel.id)).videos); } catch(e) {}
+  if (!vids.length && rel.master) { try { vids = pickVideos((await api('/masters/' + rel.master)).videos); } catch(e) {} }
+  S.vidCache.set(rel.id, vids);
+  return vids;
+}
+
+async function topUp(){
+  if (S.filling || !S.items.length) return;
+  S.filling = true;
+  try {
+    let tries = 0;
+    const recent = new Set(S.history.slice(0, 30).map(h => h.yt));
+    while (S.queue.length < 3 && tries < 15) {
+      tries++;
+      const rel = draw(); if (!rel) break;
+      if (S.queue.some(q => q.rel.id === rel.id) || (S.current && S.current.rel.id === rel.id)) continue;
+      if (!S.current && !S.queue.length) setStatus(`Tuning… checking ${rel.artist}`);
+      const vids = (await videosFor(rel)).filter(v => !recent.has(v.yt));
+      if (!vids.length) { S.dead.add(rel.id); continue; }
+      const v = vids[Math.floor(Math.random() * vids.length)];
+      S.queue.push({ rel, ...v });
+      renderQueue();
+      if (S.pendingPlay) { S.pendingPlay = false; playNext(); }
+    }
+    if (!S.queue.length && !S.current) setStatus('No playable records found on this dial');
+  } finally { S.filling = false; }
+}
+
+/* ---------- Announcer ---------- */
+function speak(text){
+  return new Promise(res => {
+    if (!('speechSynthesis' in window)) return res();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.02; u.pitch = 0.95;
+    const t = setTimeout(res, 15000);
+    u.onend = u.onerror = () => { clearTimeout(t); res(); };
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  });
+}
+function ident(prev, next){
+  const mode = $('announcer').value;
+  if (mode === 'off') return null;
+  if (mode === 'few' && S.played % 3 !== 0) return null;
+  const stn = S.user.replace(/_/g, ' ') + ' FM';
+  const yr = next.rel.year ? `, from ${next.rel.year}` : '';
+  if (!prev) return `You're tuned to ${stn}. First up, ${next.rel.artist}, ${next.rel.title}${yr}.`;
+  return `That was ${prev.rel.artist}. This is ${stn}. Next, ${next.rel.artist}, ${next.rel.title}${yr}.`;
+}
+
+/* ---------- Playback ---------- */
+let stallTimer = null;
+async function playNext(){
+  const prev = S.current;
+  if (prev) { S.history.unshift(prev); S.history = S.history.slice(0, 40); renderHist(); }
+  const item = S.queue.shift();
+  S.current = null;
+  if (!item) { S.pendingPlay = true; setStatus('Tuning…'); topUp(); return; }
+  S.current = item;
+  renderNow(); renderQueue();
+  const line = ident(prev, item);
+  S.played++;
+  if (line) { setStatus('Announcer', true); if (S.ready) S.player.pauseVideo(); await speak(line); }
+  if (S.current !== item) return;
+  if (S.ready) {
+    S.player.loadVideoById(item.yt);
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => {
+      const st = S.player.getPlayerState && S.player.getPlayerState();
+      if (st !== 1 && st !== 3 && st !== 2) setStatus('Tap play on the video to start the sound', false);
+    }, 5000);
+  }
+  topUp();
+}
+
+window.onYouTubeIframeAPIReady = function(){
+  S.player = new YT.Player('yt', {
+    width: '100%', height: '100%',
+    playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+    events: {
+      onReady: () => { S.ready = true; },
+      onStateChange: e => {
+        if (e.data === 1) { $('idle').hidden = true; setStatus('On air', true); $('playBtn').textContent = 'Pause'; }
+        if (e.data === 2) { setStatus('Paused'); $('playBtn').textContent = 'Play'; }
+        if (e.data === 0) playNext();
+      },
+      onError: () => { setStatus('That video won’t play here, skipping'); setTimeout(playNext, 1200); }
+    }
+  });
+};
+
+/* ---------- Rendering ---------- */
+function setImg(img, src){ if (src) img.src = src; else img.removeAttribute('src'); }
+function renderNow(){
+  const it = S.current; if (!it) return;
+  const r = it.rel;
+  $('now').hidden = false;
+  setImg($('nowCover'), r.cover); $('nowCover').alt = `${r.artist} – ${r.title} cover`;
+  $('nowArtist').textContent = r.artist;
+  $('nowTitle').textContent = r.title;
+  const meta = $('nowMeta'); meta.textContent = '';
+  [r.label && (r.label + (r.catno ? ' · ' + r.catno : '')), r.format, r.year || null].filter(Boolean)
+    .forEach(t => { const s = document.createElement('span'); s.textContent = t; meta.appendChild(s); });
+  const a = document.createElement('a'); a.href = 'https://www.discogs.com/release/' + r.id; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'View on Discogs';
+  meta.appendChild(a);
+  $('nowVideo').textContent = it.vtitle ? 'Video: ' + it.vtitle : '';
+  const tags = $('nowTags'); tags.textContent = '';
+  r.styles.slice(0, 5).forEach(t => { const s = document.createElement('span'); s.className = 'tag'; s.textContent = t; tags.appendChild(s); });
+}
+function li(it, sub){
+  const l = document.createElement('li');
+  const img = document.createElement('img'); img.alt = ''; setImg(img, it.rel.cover); img.loading = 'lazy';
+  const t = document.createElement('div'); t.className = 't';
+  t.textContent = `${it.rel.artist} – ${it.rel.title}`;
+  const s = document.createElement('small'); s.textContent = sub; t.appendChild(s);
+  l.append(img, t); return l;
+}
+function renderList(el, arr, empty, subFn){
+  el.textContent = '';
+  if (!arr.length) { const e = document.createElement('li'); e.className = 'empty'; e.style.display = 'block'; e.textContent = empty; el.appendChild(e); return; }
+  arr.forEach(it => el.appendChild(li(it, subFn(it))));
+}
+const sub = it => [it.rel.label, it.rel.year || ''].filter(Boolean).join(' · ');
+function renderQueue(){ renderList($('next'), S.queue, S.items.length ? 'Finding records…' : 'Nothing queued yet', sub); }
+function renderHist(){ renderList($('hist'), S.history.slice(0, 10), 'Nothing played yet', sub); }
+
+/* ---------- Controls ---------- */
+async function load(){
+  const user = $('user').value.trim();
+  if (!user) return;
+  S.user = user; setStation(user);
+  S.items = []; S.bag = []; S.queue = []; S.dead.clear(); renderQueue();
+  $('loadBtn').disabled = true; $('playBtn').disabled = true;
+  try {
+    S.items = await loadCollection(user);
+    if (!S.items.length) { setStatus('That collection is empty'); return; }
+    buildFilters(); refillBag();
+    setStatus(`${S.items.length} records loaded. Press Tune in`);
+    $('playBtn').disabled = false; $('skipBtn').disabled = false; $('dropBtn').disabled = false; $('mixBtn').disabled = false;
+    topUp();
+  } catch (e) {
+    if (e.status === 404) setStatus('No Discogs user with that name');
+    else if (e.status === 401 || e.status === 403) setStatus('That collection is private');
+    else setStatus('Couldn’t reach Discogs. Open this page from a web address, not a file');
+  } finally { $('loadBtn').disabled = false; }
+}
+$('loadBtn').onclick = load;
+$('user').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+$('playBtn').onclick = () => {
+  if (!S.started) { S.started = true; keepAwake(); $('playBtn').textContent = 'Pause'; playNext(); return; }
+  if (!S.ready) return;
+  const st = S.player.getPlayerState();
+  if (st === 1) S.player.pauseVideo(); else S.player.playVideo();
+};
+$('skipBtn').onclick = () => { if ('speechSynthesis' in window) speechSynthesis.cancel(); S.started = true; playNext(); };
+$('dropBtn').onclick = () => { if (S.current) S.dead.add(S.current.rel.id); $('skipBtn').onclick(); };
+/* YouTube mix: up to 25 tracks from the current dial as one anonymous YouTube playlist */
+$('mixBtn').onclick = async () => {
+  const btn = $('mixBtn'); btn.disabled = true;
+  $('mix').hidden = false; $('mixLink').hidden = true;
+  const ids = [], seenRel = new Set();
+  const add = it => { if (it && !seenRel.has(it.rel.id) && ids.length < 25) { seenRel.add(it.rel.id); ids.push(it.yt); } };
+  add(S.current); S.queue.forEach(add);
+  let tries = 0;
+  while (ids.length < 25 && tries < 60) {
+    tries++;
+    const rel = draw(); if (!rel) break;
+    if (seenRel.has(rel.id)) continue;
+    $('mixMsg').textContent = `Finding tracks… ${ids.length} of 25`;
+    const vids = await videosFor(rel);
+    if (!vids.length) { S.dead.add(rel.id); continue; }
+    add({ rel, ...vids[Math.floor(Math.random() * vids.length)] });
+  }
+  if (ids.length) {
+    $('mixLink').href = 'https://www.youtube.com/watch_videos?video_ids=' + ids.join(',');
+    $('mixLink').textContent = `Open ${ids.length} tracks in YouTube`;
+    $('mixLink').hidden = false;
+    $('mixMsg').textContent = 'Plays back to back in the YouTube app.';
+  } else $('mixMsg').textContent = 'No playable tracks found on this dial.';
+  btn.disabled = false;
+};
+
+/* Keep the screen awake while the station runs */
+let wake = null;
+async function keepAwake(){ try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => wake = null); } } catch(e) {} }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.started) keepAwake(); });
+
+function redial(){ S.queue = S.queue.filter(q => pool().some(p => p.id === q.rel.id)); refillBag(); renderQueue(); topUp(); }
+$('style').onchange = redial; $('decade').onchange = redial;
+$('announcer').onchange = e => store.set('cfm:announcer', e.target.value);
+$('token').onchange = e => { S.token = e.target.value.trim(); store.set('cfm:token', S.token); };
+
+load();
+})();
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
